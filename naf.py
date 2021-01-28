@@ -6,9 +6,13 @@ from torch.optim import Adam
 from torch.autograd import Variable
 import torch.nn.functional as F
 
+DEVICE = torch.device('cuda:0')
+DTYPE = torch.float
+
 
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2) / input.data.nelement()
+
 
 def update_fixed_network(target, source, tau=1):
     for target_param, param in zip(target.parameters(), source.parameters()):
@@ -22,38 +26,45 @@ class QNetwork(nn.Module):
         self.action_space = action_space
         num_outputs = action_space.shape[0]
 
-        self.bn0 = nn.BatchNorm1d(state_features_size) # batch network, layer 0 , size num_inputs = state featu
+        self.bn0 = nn.BatchNorm1d(state_features_size).to(
+            device=DEVICE)  # batch network, layer 0 , size num_inputs = state featu
         self.bn0.weight.data.fill_(1)
         self.bn0.bias.data.fill_(0)
 
-        self.linear1 = nn.Linear(state_features_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear1 = nn.Linear(state_features_size, hidden_size).to(device=DEVICE)
+        self.linear2 = nn.Linear(hidden_size, hidden_size).to(device=DEVICE)
 
-        self.V = nn.Linear(hidden_size, 1) # linear function, receives hidden_size and output the estimated value function
+        self.V = nn.Linear(hidden_size, 1).to(
+            device=DEVICE)  # linear function, receives hidden_size and output the estimated value function
         self.V.weight.data.mul_(0.1)
         self.V.bias.data.mul_(0.1)
 
-        self.mu = nn.Linear(hidden_size, num_outputs) # linear function, returns the best action for a state
+        self.mu = nn.Linear(hidden_size, num_outputs).to(
+            device=DEVICE)  # linear function, returns the best action for a state
         self.mu.weight.data.mul_(0.1)
         self.mu.bias.data.mul_(0.1)
 
-        self.L = nn.Linear(hidden_size, num_outputs ** 2) # in order to calculate the Advantage function
+        self.L = nn.Linear(hidden_size, num_outputs ** 2).to(
+            device=DEVICE)  # in order to calculate the Advantage function
         self.L.weight.data.mul_(0.1)
         self.L.bias.data.mul_(0.1)
 
         # lower trinagular matrix (without the diagonal), for calculate the advantage function
-        self.tril_mask = Variable(torch.tril(torch.ones(num_outputs, num_outputs), diagonal=-1).unsqueeze(0))
+        self.tril_mask = Variable(torch.tril(torch.ones(num_outputs, num_outputs), diagonal=-1).unsqueeze(0)).to(
+            device=DEVICE)
         # for advantage function calculation
-        self.diag_mask = Variable(torch.diag(torch.diag(torch.ones(num_outputs,  num_outputs))).unsqueeze(0))
+        self.diag_mask = Variable(torch.diag(torch.diag(torch.ones(num_outputs, num_outputs))).unsqueeze(0)).to(
+            device=DEVICE)
 
     def forward(self, inputs):
         x, u = inputs  # state, action
+        x = x.to(device=DEVICE)
         x = self.bn0(x)
-        x = F.tanh(self.linear1(x))
-        x = F.tanh(self.linear2(x))
+        x = torch.tanh(self.linear1(x))
+        x = torch.tanh(self.linear2(x))
 
         V = self.V(x)  # applying linear1, linear2 on x and finally V.
-        mu = F.tanh(self.mu(x))  # applying linear1, linear2 on x and finally F.than(mu(x)).
+        mu = torch.tanh(self.mu(x))  # applying linear1, linear2 on x and finally F.than(mu(x)).
 
         Q = None
         # calculating the advantage function
@@ -78,8 +89,8 @@ class NAF:
         self.action_space = action_space
         self.num_inputs = num_inputs
 
-        self.model = QNetwork(hidden_size, num_inputs, action_space)
-        self.target_model = QNetwork(hidden_size, num_inputs, action_space)
+        self.model = QNetwork(hidden_size, num_inputs, action_space).to(torch.device("cuda:0"), dtype=DTYPE)
+        self.target_model = QNetwork(hidden_size, num_inputs, action_space).to(torch.device("cuda:0"), dtype=DTYPE)
         self.optimizer = Adam(self.model.parameters(), lr=1e-3)
 
         self.gamma = gamma
@@ -94,16 +105,16 @@ class NAF:
         self.model.train()
         mu = mu.data
         if action_noise is not None:
-            mu += torch.Tensor(action_noise.noise())
+            mu += torch.Tensor(action_noise.noise()).to(device=DEVICE)
 
-        return mu.clamp(-1, 1)
+        return mu.clamp(-1, 1).cpu()
 
     def update_parameters(self, batch):
-        state_batch = Variable(torch.cat(batch.state))
-        action_batch = Variable(torch.cat(batch.action))
-        reward_batch = Variable(torch.cat(batch.reward))
-        mask_batch = Variable(torch.cat(batch.mask))
-        next_state_batch = Variable(torch.cat(batch.next_state))
+        state_batch = Variable(torch.cat(batch.state)).to(device=DEVICE)
+        action_batch = Variable(torch.cat(batch.action)).to(device=DEVICE)
+        reward_batch = Variable(torch.cat(batch.reward)).to(device=DEVICE)
+        mask_batch = Variable(torch.cat(batch.mask)).to(device=DEVICE)
+        next_state_batch = Variable(torch.cat(batch.next_state)).to(device=DEVICE)
 
         _, _, next_state_values = self.target_model((next_state_batch, None))  # V' (of theta - target model)
 
@@ -118,7 +129,7 @@ class NAF:
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm(self.model.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
         self.optimizer.step()
 
         update_fixed_network(self.target_model, self.model, self.tau)
@@ -135,5 +146,8 @@ class NAF:
         torch.save(self.model.state_dict(), model_path)
 
     def load_model(self, model_path):
-        print('Loading model from {}'.format(model_path))
-        self.model.load_state_dict(torch.load(model_path))
+        if os.path.exists(model_path):
+            print('Loading model from {}'.format(model_path))
+            self.model.load_state_dict(torch.load(model_path))
+            self.target_model.load_state_dict(torch.load(model_path))
+
