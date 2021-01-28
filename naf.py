@@ -3,10 +3,9 @@ import os
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from torch.autograd import Variable
-import torch.nn.functional as F
 
-DEVICE = torch.device('cuda:0')
+device_name = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+DEVICE = torch.device(device_name)
 DTYPE = torch.float
 
 
@@ -50,15 +49,15 @@ class QNetwork(nn.Module):
         self.L.bias.data.mul_(0.1)
 
         # lower trinagular matrix (without the diagonal), for calculate the advantage function
-        self.tril_mask = Variable(torch.tril(torch.ones(num_outputs, num_outputs), diagonal=-1).unsqueeze(0)).to(
-            device=DEVICE)
+        self.tril_mask = torch.tril(
+            torch.ones(num_outputs, num_outputs, dtype=DTYPE, device=DEVICE),
+            diagonal=-1).unsqueeze(0)
         # for advantage function calculation
-        self.diag_mask = Variable(torch.diag(torch.diag(torch.ones(num_outputs, num_outputs))).unsqueeze(0)).to(
-            device=DEVICE)
+        self.diag_mask = torch.diag(torch.diag(
+            torch.ones(num_outputs, num_outputs, dtype=DTYPE, device=DEVICE))).unsqueeze(0)
 
     def forward(self, inputs):
         x, u = inputs  # state, action
-        x = x.to(device=DEVICE)
         x = self.bn0(x)
         x = torch.tanh(self.linear1(x))
         x = torch.tanh(self.linear2(x))
@@ -89,8 +88,8 @@ class NAF:
         self.action_space = action_space
         self.num_inputs = num_inputs
 
-        self.model = QNetwork(hidden_size, num_inputs, action_space).to(torch.device("cuda:0"), dtype=DTYPE)
-        self.target_model = QNetwork(hidden_size, num_inputs, action_space).to(torch.device("cuda:0"), dtype=DTYPE)
+        self.model = QNetwork(hidden_size, num_inputs, action_space).to(DEVICE, dtype=DTYPE)
+        self.target_model = QNetwork(hidden_size, num_inputs, action_space).to(DEVICE, dtype=DTYPE)
         self.optimizer = Adam(self.model.parameters(), lr=1e-3)
 
         self.gamma = gamma
@@ -100,26 +99,26 @@ class NAF:
 
     # returns action normalized to range of [-1,1]
     def select_action(self, state, action_noise=None):
+        state = torch.tensor([state], dtype=DTYPE, device=DEVICE)
         self.model.eval()
-        mu, _, _ = self.model((Variable(state), None))
+        mu, _, _ = self.model((state, None))
         self.model.train()
         mu = mu.data
         if action_noise is not None:
-            mu += torch.Tensor(action_noise.noise()).to(device=DEVICE)
+            mu += torch.tensor(action_noise.noise(), dtype=DTYPE, device=DEVICE)
 
-        return mu.clamp(-1, 1).cpu()
+        return mu.clamp(-1, 1).cpu().numpy()
 
     def update_parameters(self, batch):
-        state_batch = Variable(torch.cat(batch.state)).to(device=DEVICE)
-        action_batch = Variable(torch.cat(batch.action)).to(device=DEVICE)
-        reward_batch = Variable(torch.cat(batch.reward)).to(device=DEVICE)
-        mask_batch = Variable(torch.cat(batch.mask)).to(device=DEVICE)
-        next_state_batch = Variable(torch.cat(batch.next_state)).to(device=DEVICE)
+        batch_size = len(batch.state)
+        state_batch = torch.tensor(batch.state, dtype=DTYPE, device=DEVICE).view(batch_size, -1)
+        action_batch = torch.tensor(batch.action, dtype=DTYPE, device=DEVICE).view(batch_size, -1)
+        reward_batch = torch.tensor(batch.reward, dtype=DTYPE, device=DEVICE).view(batch_size, -1)
+        mask_batch = torch.tensor(batch.mask, dtype=DTYPE, device=DEVICE).view(batch_size, -1)
+        next_state_batch = torch.tensor(batch.next_state, dtype=DTYPE, device=DEVICE).view(batch_size, -1)
 
         _, _, next_state_values = self.target_model((next_state_batch, None))  # V' (of theta - target model)
 
-        reward_batch = reward_batch.unsqueeze(1)
-        mask_batch = mask_batch.unsqueeze(1)
         # expected_state_action_values = reward_batch + (self.gamma * mask_batch + next_state_values) bug?
         expected_state_action_values = reward_batch + (self.gamma * mask_batch * next_state_values)
 

@@ -7,7 +7,9 @@ from normalized_actions import NormalizedActions
 from ounoise import OUNoise
 from replay_buffer import ReplayBuffer, Transition
 
-DEVICE = torch.device('cuda:0')
+device_name = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+print(f'Using device: {device_name}')
+DEVICE = torch.device(device_name)
 DTYPE = torch.float
 
 args = {'env_name': 'MountainCarContinuous-v0',
@@ -44,37 +46,29 @@ def run():
     rewards = []
 
     for episode in range(args['num_episodes']):
-        state = torch.Tensor([env.reset()]).to(device=DEVICE)
+        state = env.reset()
+
         set_noise(episode)
+
         episode_reward = 0
         episode_steps = 0
         is_done = False
 
         while not is_done:
             act = agent.select_action(state, ounoise)
-            suc_state, reward, is_done, _ = env.step(act.numpy()[0])
+            suc_state, reward, is_done, _ = env.step(act[0])
+
             num_steps += 1
             episode_steps += 1
-            if episode_steps % 100 == 0:
-                print(episode_steps)
             episode_reward += reward
 
-            # prepare for insert to replay buffer
-            # action = torch.Tensor(act).to(device=DEVICE)
-            # done = torch.tensor([not is_done]).to(device=DEVICE)  # put 0 if is done
-            # successor_state = torch.Tensor([suc_state]).to(device=DEVICE)
-            # reward = torch.Tensor([reward]).to(device=DEVICE)
+            done_mask = 0.0 if is_done else 1.0
+            replay_buffer.push([state], [act], [done_mask], [suc_state], [reward])
 
-            action = np.array(act)
-            done = np.array([not is_done])
-            successor_state = np.array([suc_state])
-            reward = np.array([reward])
-            replay_buffer.push(state, action, done, successor_state, reward)
-
-            state = successor_state
+            state = suc_state
 
             if len(replay_buffer) > args['batch_size']:
-                sample_buffer()
+                train_on_minibatches()
 
         rewards.append(episode_reward)
         print(rewards)
@@ -86,22 +80,21 @@ def run():
                                                                                            rewards[-1],
                                                                                            np.mean(rewards[-10:])))
         if episode % 5 == 0:
-            print('save model')
             agent.save_model(args['env_name'])
 
     env.close()
 
 
 def run_simulation():
-    state = torch.Tensor([env.reset()]).to(device=DEVICE)
+    state = env.reset()
     episode_reward = 0
     while True:
         action = agent.select_action(state)
 
-        next_state, reward, done, _ = env.step(action.numpy()[0])
+        next_state, reward, done, _ = env.step(action[0])
         episode_reward += reward
 
-        next_state = torch.Tensor([next_state]).to(device=DEVICE)
+        next_state = next_state
 
         state = next_state
         if done:
@@ -118,7 +111,7 @@ def set_noise(episode):
         ounoise.reset()
 
 
-def sample_buffer():
+def train_on_minibatches():
     for i in range(args['replay_num_updates']):
         transitions = replay_buffer.sample(args['batch_size'])
         batch = Transition(*zip(*transitions))
