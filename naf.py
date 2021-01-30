@@ -13,7 +13,7 @@ def mse_loss(input, target):
     return torch.sum((input - target) ** 2) / input.data.nelement()
 
 
-def update_fixed_network(target, source, tau=1):
+def update_fixed_network(target, source, tau=1.0):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
@@ -25,30 +25,30 @@ class QNetwork(nn.Module):
         self.action_space = action_space
         num_outputs = action_space.shape[0]
 
-        self.bn0 = nn.BatchNorm1d(state_features_size).to(
-            device=DEVICE)  # batch network, layer 0 , size num_inputs = state featu
+        # batch network, layer 0 , size num_inputs = state features
+        self.bn0 = nn.BatchNorm1d(state_features_size).to(device=DEVICE)
         self.bn0.weight.data.fill_(1)
         self.bn0.bias.data.fill_(0)
 
         self.linear1 = nn.Linear(state_features_size, hidden_size).to(device=DEVICE)
         self.linear2 = nn.Linear(hidden_size, hidden_size).to(device=DEVICE)
 
-        self.V = nn.Linear(hidden_size, 1).to(
-            device=DEVICE)  # linear function, receives hidden_size and output the estimated value function
+        # linear function, receives hidden_size and output the estimated value function
+        self.V = nn.Linear(hidden_size, 1).to(device=DEVICE)
         self.V.weight.data.mul_(0.1)
         self.V.bias.data.mul_(0.1)
 
-        self.mu = nn.Linear(hidden_size, num_outputs).to(
-            device=DEVICE)  # linear function, returns the best action for a state
+        # linear function, returns the best action for a state
+        self.mu = nn.Linear(hidden_size, num_outputs).to(device=DEVICE)
         self.mu.weight.data.mul_(0.1)
         self.mu.bias.data.mul_(0.1)
 
-        self.L = nn.Linear(hidden_size, num_outputs ** 2).to(
-            device=DEVICE)  # in order to calculate the Advantage function
+        # in order to calculate the Advantage function
+        self.L = nn.Linear(hidden_size, num_outputs ** 2).to(device=DEVICE)
         self.L.weight.data.mul_(0.1)
         self.L.bias.data.mul_(0.1)
 
-        # lower trinagular matrix (without the diagonal), for calculate the advantage function
+        # lower triangular matrix (without the diagonal), for calculate the advantage function
         self.tril_mask = torch.tril(
             torch.ones(num_outputs, num_outputs, dtype=DTYPE, device=DEVICE),
             diagonal=-1).unsqueeze(0)

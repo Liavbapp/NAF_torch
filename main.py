@@ -1,6 +1,8 @@
 import gym
 import torch
 import numpy as np
+import pandas as pd
+import os
 
 from naf import NAF
 from normalized_actions import NormalizedActions
@@ -14,17 +16,17 @@ DTYPE = torch.float
 
 args = {'env_name': 'MountainCarContinuous-v0',
         'seed': 42,
-        'gamma': 0.9,
+        'gamma': 1,
         'tau': 0.001,
         'hidden_size': 128,
         'replay_size': 1000000,
-        'num_episodes': 1000,
+        'num_episodes': 100,
         'batch_size': 128,
         'replay_num_updates': 5,
         'ou_noise': True,
-        'noise_scale': 0.3,
-        'final_noise_scale': 0.3,
-        'exploration_end': 100}
+        'noise_scale': 1,
+        'final_noise_scale': 0.1,
+        'exploration_end': 400}
 
 env = NormalizedActions(gym.make(args['env_name']))
 
@@ -71,14 +73,15 @@ def run():
                 train_on_minibatches()
 
         rewards.append(episode_reward)
-        print(rewards)
 
-        if episode % 2 == 0:
+        if episode % 1 == 0:
             episode_reward = run_simulation()
             rewards.append(episode_reward)
-            print("Episode: {}, total numsteps: {}, reward: {}, average reward: {}".format(episode, num_steps,
-                                                                                           rewards[-1],
-                                                                                           np.mean(rewards[-10:])))
+
+            print(rewards[-20:])
+            report_results(episode+1, episode_steps, rewards[-1], num_steps, np.mean(rewards[-10:]))
+            print(f'Episode: {episode+1}, Steps: {episode_steps}, reward: {rewards[-1]}, total numsteps: {num_steps}, '
+                  f'average reward: {np.mean(rewards[-10:])}')
         if episode % 5 == 0:
             agent.save_model(args['env_name'])
 
@@ -105,8 +108,8 @@ def run_simulation():
 
 def set_noise(episode):
     if ounoise:
-        ounoise.scale = (args['noise_scale'] - args['final_noise_scale']) * max(0, args['exploration_end'] -
-                                                                                episode) / args['exploration_end'] + \
+        ounoise.scale = (args['noise_scale'] - args['final_noise_scale']) * \
+                        max(0, args['exploration_end'] - episode) / args['exploration_end'] + \
                         args['final_noise_scale']
         ounoise.reset()
 
@@ -117,6 +120,21 @@ def train_on_minibatches():
         batch = Transition(*zip(*transitions))
         val_loss = agent.update_parameters(batch)
         # print(val_loss)
+
+
+def report_results(episode, episode_steps, reward, numsteps, avg_reward):
+    results_path = 'results'
+    os.makedirs(results_path, exist_ok=True)
+    file_path = os.path.join(results_path, 'results.csv')
+    files_list = os.listdir(results_path)
+
+    add_head = 'results.csv' not in files_list
+    file1 = open(file_path, "a+")
+    if add_head:
+        file1.write("Episode,Steps,Reward,TotalSteps,AVG_Reward \n")
+
+    file1.write(f'{episode},{episode_steps},{reward},{numsteps},{avg_reward}\n')
+    file1.close()
 
 
 if __name__ == '__main__':
