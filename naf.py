@@ -59,8 +59,8 @@ class QNetwork(nn.Module):
     def forward(self, inputs):
         x, u = inputs  # state, action
         x = self.bn0(x)
-        x = torch.tanh(self.linear1(x))
-        x = torch.tanh(self.linear2(x))
+        x = torch.relu_(self.linear1(x))
+        x = torch.relu_(self.linear2(x))
 
         V = self.V(x)  # applying linear1, linear2 on x and finally V.
         mu = torch.tanh(self.mu(x))  # applying linear1, linear2 on x and finally F.than(mu(x)).
@@ -107,7 +107,7 @@ class NAF:
         if action_noise is not None:
             mu += torch.tensor(action_noise.noise(), dtype=DTYPE, device=DEVICE)
 
-        return mu.clamp(-1, 1).cpu().numpy()
+        return mu.clamp(-1, 1).cpu().numpy()[0]
 
     def update_parameters(self, batch):
         batch_size = len(batch.state)

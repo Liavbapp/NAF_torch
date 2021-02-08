@@ -14,20 +14,52 @@ print(f'Using device: {device_name}')
 DEVICE = torch.device(device_name)
 DTYPE = torch.float
 
-args = {'env_name': 'MountainCarContinuous-v0',
-        'seed': 42,
-        'gamma': 1,
-        'tau': 0.001,
-        'hidden_size': 128,
-        'replay_size': 1000000,
-        'num_episodes': 100,
-        'batch_size': 128,
-        'replay_num_updates': 5,
-        'ou_noise': True,
-        'noise_scale': 1,
-        'final_noise_scale': 0.1,
-        'exploration_end': 400}
+args_mc = {'env_name': 'MountainCarContinuous-v0',  # 'Pendulum-v0', #'LunarLanderContinuous-v2',
+           'seed': 42,
+           'gamma': 1,
+           'tau': 0.001,
+           'hidden_size': 200,
+           'replay_size': 100000,
+           'num_episodes': 200,
+           'batch_size': 128,
+           'replay_num_updates': 5,
+           'ou_noise': True,
+           'noise_scale': 1,
+           'final_noise_scale': 0.1,
+           'exploration_end': 400,
+           'evaluate_episodes': 100}
 
+args_pd = {'env_name': 'Pendulum-v0',  # 'LunarLanderContinuous-v2',
+           'seed': 42,
+           'gamma': 1,
+           'tau': 0.001,
+           'hidden_size': 200,
+           'replay_size': 100000,
+           'num_episodes': 200,
+           'batch_size': 128,
+           'replay_num_updates': 5,
+           'ou_noise': True,
+           'noise_scale': 1,
+           'final_noise_scale': 0.1,
+           'exploration_end': 400,
+           'evaluate_episodes': 100}
+
+args_ll = {'env_name': 'LunarLanderContinuous-v2',
+           'seed': 42,
+           'gamma': 1,
+           'tau': 0.001,
+           'hidden_size': 200,
+           'replay_size': 100000,
+           'num_episodes': 200,
+           'batch_size': 128,
+           'replay_num_updates': 5,
+           'ou_noise': True,
+           'noise_scale': 0.6,
+           'final_noise_scale': 0.1,
+           'exploration_end': 200,
+           'evaluate_episodes': 100}
+
+args = args_mc
 env = NormalizedActions(gym.make(args['env_name']))
 
 env.seed(args['seed'])
@@ -45,24 +77,21 @@ ounoise = OUNoise(env.action_space.shape[0]) if args['ou_noise'] else None
 
 def run():
     num_steps = 0
-    rewards = []
 
     for episode in range(args['num_episodes']):
         state = env.reset()
 
         set_noise(episode)
 
-        episode_reward = 0
         episode_steps = 0
         is_done = False
 
         while not is_done:
             act = agent.select_action(state, ounoise)
-            suc_state, reward, is_done, _ = env.step(act[0])
+            suc_state, reward, is_done, _ = env.step(act)
 
             num_steps += 1
             episode_steps += 1
-            episode_reward += reward
 
             done_mask = 0.0 if is_done else 1.0
             replay_buffer.push([state], [act], [done_mask], [suc_state], [reward])
@@ -72,16 +101,13 @@ def run():
             if len(replay_buffer) > args['batch_size']:
                 train_on_minibatches()
 
-        rewards.append(episode_reward)
-
         if episode % 1 == 0:
-            episode_reward = run_simulation()
-            rewards.append(episode_reward)
+            eval_score = evaluate_policy()
 
-            print(rewards[-20:])
-            report_results(episode+1, episode_steps, rewards[-1], num_steps, np.mean(rewards[-10:]))
-            print(f'Episode: {episode+1}, Steps: {episode_steps}, reward: {rewards[-1]}, total numsteps: {num_steps}, '
-                  f'average reward: {np.mean(rewards[-10:])}')
+            report_results(episode + 1, num_steps, eval_score)
+            print(
+                f'Episode: {episode + 1}, Total numsteps: {num_steps}, '
+                f'Score: {eval_score}')
         if episode % 5 == 0:
             agent.save_model(args['env_name'])
 
@@ -89,21 +115,33 @@ def run():
 
 
 def run_simulation():
+    done = False
+    t = 0
+    gt = 0
+
     state = env.reset()
-    episode_reward = 0
-    while True:
+
+    while not done:
         action = agent.select_action(state)
+        s, reward, done, _ = env.step(action)
+        gt += reward * (args['gamma'] ** t)
 
-        next_state, reward, done, _ = env.step(action[0])
-        episode_reward += reward
-
-        next_state = next_state
-
-        state = next_state
         if done:
             break
 
-    return episode_reward
+        t += 1
+
+    return gt
+
+
+def evaluate_policy():
+    acc = 0
+
+    for i in range(args['evaluate_episodes']):
+        res = run_simulation()
+        acc += res
+
+    return acc / args['evaluate_episodes']
 
 
 def set_noise(episode):
@@ -122,18 +160,19 @@ def train_on_minibatches():
         # print(val_loss)
 
 
-def report_results(episode, episode_steps, reward, numsteps, avg_reward):
+def report_results(episode, numsteps, score):
     results_path = 'results'
     os.makedirs(results_path, exist_ok=True)
-    file_path = os.path.join(results_path, 'results.csv')
-    files_list = os.listdir(results_path)
 
-    add_head = 'results.csv' not in files_list
+    file_name = f'results_{args["env_name"]}.csv'
+    file_path = os.path.join(results_path, file_name)
+
+    add_head = file_name not in os.listdir(results_path)
     file1 = open(file_path, "a+")
     if add_head:
-        file1.write("Episode,Steps,Reward,TotalSteps,AVG_Reward \n")
+        file1.write("Episode,TotalSteps,Score \n")
 
-    file1.write(f'{episode},{episode_steps},{reward},{numsteps},{avg_reward}\n')
+    file1.write(f'{episode},{numsteps},{score}\n')
     file1.close()
 
 
