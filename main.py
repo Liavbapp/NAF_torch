@@ -14,7 +14,7 @@ print(f'Using device: {device_name}')
 DEVICE = torch.device(device_name)
 DTYPE = torch.float
 
-args_mc = {'env_name': 'MountainCarContinuous-v0',  # 'Pendulum-v0', #'LunarLanderContinuous-v2',
+args_mc = {'env_name': 'MountainCarContinuous-v0',
            'seed': 42,
            'gamma': 1,
            'tau': 0.001,
@@ -81,7 +81,7 @@ def run():
     for episode in range(args['num_episodes']):
         state = env.reset()
 
-        set_noise(episode)
+        update_noise(episode)
 
         episode_steps = 0
         is_done = False
@@ -144,7 +144,7 @@ def evaluate_policy():
     return acc / args['evaluate_episodes']
 
 
-def set_noise(episode):
+def update_noise(episode):
     if ounoise:
         ounoise.scale = (args['noise_scale'] - args['final_noise_scale']) * \
                         max(0, args['exploration_end'] - episode) / args['exploration_end'] + \
