@@ -29,7 +29,7 @@ args_mc = {'env_name': 'MountainCarContinuous-v0',
            'exploration_end': 400,
            'evaluate_episodes': 100}
 
-args_pd = {'env_name': 'Pendulum-v0',  # 'LunarLanderContinuous-v2',
+args_pd = {'env_name': 'Pendulum-v0',
            'seed': 42,
            'gamma': 1,
            'tau': 0.001,
@@ -123,7 +123,7 @@ def run_simulation():
 
     while not done:
         action = agent.select_action(state)
-        s, reward, done, _ = env.step(action)
+        state, reward, done, _ = env.step(action)
         gt += reward * (args['gamma'] ** t)
 
         if done:
