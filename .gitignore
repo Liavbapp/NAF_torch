@@ -3,3 +3,8 @@ run_job
 models
 results
 /tryout.py
+/run_ll
+/run_mc
+/run_pd
+/run_ab
+/run_hc
