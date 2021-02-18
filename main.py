@@ -46,7 +46,7 @@ args_pd = {'env_name': 'Pendulum-v0',
            'noise_scale': 1,
            'final_noise_scale': 0.1,
            'exploration_end': 400,
-           'c': 100}
+           'evaluate_episodes': 100}
 
 args_ll = {'env_name': 'LunarLanderContinuous-v2',
            'seed': 42,
