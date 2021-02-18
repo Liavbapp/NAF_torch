@@ -11,8 +11,6 @@ from replay_buffer import ReplayBuffer, Transition
 
 from plot import plot_results
 
-import pybullet_envs
-
 device_name = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 print(f'Using device: {device_name}')
 DEVICE = torch.device(device_name)
@@ -23,14 +21,14 @@ args_mc = {'env_name': 'MountainCarContinuous-v0',
            'gamma': 1,
            'tau': 0.001,
            'hidden_size': 200,
-           'replay_size': 100000,
-           'num_episodes': 500,
+           'replay_size': 1000000,
+           'num_episodes': 1000,
            'batch_size': 128,
            'replay_num_updates': 5,
            'ou_noise': True,
-           'noise_scale': 1,
-           'final_noise_scale': 0.1,
-           'exploration_end': 200,
+           'noise_scale': 3,
+           'final_noise_scale': 0,
+           'exploration_end': 500,
            'evaluate_episodes': 100}
 
 args_pd = {'env_name': 'Pendulum-v0',
@@ -63,27 +61,12 @@ args_ll = {'env_name': 'LunarLanderContinuous-v2',
            'exploration_end': 500,
            'evaluate_episodes': 100}
 
-args_ab = {'env_name': 'AntBulletEnv-v0',
+args_ll = {'env_name': 'LunarLanderContinuous-v2',
            'seed': 42,
            'gamma': 1,
            'tau': 0.001,
            'hidden_size': 200,
-           'replay_size': 50000,
-           'num_episodes': 1000,
-           'batch_size': 128,
-           'replay_num_updates': 5,
-           'ou_noise': True,
-           'noise_scale': 3,
-           'final_noise_scale': 0.1,
-           'exploration_end': 500,
-           'evaluate_episodes': 100}
-
-args_hc = {'env_name': 'HalfCheetahBulletEnv-v0',
-           'seed': 42,
-           'gamma': 1,
-           'tau': 0.001,
-           'hidden_size': 200,
-           'replay_size': 50000,
+           'replay_size': 100000,
            'num_episodes': 1000,
            'batch_size': 128,
            'replay_num_updates': 5,
@@ -175,8 +158,7 @@ def train_on_minibatches():
     for i in range(args['replay_num_updates']):
         transitions = replay_buffer.sample(args['batch_size'])
         batch = Transition(*zip(*transitions))
-        val_loss = agent.update_parameters(batch)
-        # print(val_loss)
+        agent.update_parameters(batch)
 
 
 def report_results(episode, numsteps, score):
@@ -205,10 +187,6 @@ if __name__ == '__main__':
         args = args_pd
     elif env == 'll':
         args = args_ll
-    elif env == 'ab':
-        args = args_ab
-    elif env == 'hc':
-        args = args_hc
     else:
         print('Environment not selected, Please choose from: mc, pd,ll')
         exit(-1)
@@ -221,7 +199,7 @@ if __name__ == '__main__':
 
     agent = NAF(args['gamma'], args['tau'], args['hidden_size'],
                 env.observation_space.shape[0], env.action_space)
-    agent.load_model(f'models/naf_{args["env_name"]}_')
+    agent.load_model(f'models/naf_{args["env_name"]}')
 
     replay_buffer = ReplayBuffer(args['replay_size'])
 
@@ -229,4 +207,4 @@ if __name__ == '__main__':
 
     run()
 
-    # plot_results()
+    plot_results()

@@ -7,7 +7,7 @@ def plot_results():
     results = os.listdir('results')
     num_results = len(results)
 
-    fig, ax = plt.subplots(nrows=1, ncols=num_results, figsize=(6 * num_results, 4))
+    fig, ax = plt.subplots(nrows=num_results, ncols=1, figsize=(6, 4 * num_results))
     fig.subplots_adjust(hspace=0.4, wspace=0.4)
 
     for i, result in enumerate(results):

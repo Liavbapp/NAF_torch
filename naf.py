@@ -6,14 +6,14 @@ from torch.optim import Adam
 
 device_name = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 DEVICE = torch.device(device_name)
-DTYPE = torch.float
+DTYPE = torch.double
 
 
 def mse_loss(input, target):
     return torch.sum((input - target) ** 2) / input.data.nelement()
 
 
-def update_fixed_network(target, source, tau=1.0):
+def update_target_model(target, source, tau=1.0):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
@@ -95,7 +95,7 @@ class NAF:
         self.gamma = gamma
         self.tau = tau
 
-        update_fixed_network(self.target_model, self.model)
+        update_target_model(self.target_model, self.model)
 
     # returns action normalized to range of [-1,1]
     def select_action(self, state, action_noise=None):
@@ -131,7 +131,7 @@ class NAF:
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
         self.optimizer.step()
 
-        update_fixed_network(self.target_model, self.model, self.tau)
+        update_target_model(self.target_model, self.model, self.tau)
 
         return loss.item()
 
