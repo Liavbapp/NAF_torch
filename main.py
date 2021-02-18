@@ -11,6 +11,8 @@ from replay_buffer import ReplayBuffer, Transition
 
 from plot import plot_results
 
+EPISODE_TO_SCORE = 1
+
 device_name = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 print(f'Using device: {device_name}')
 DEVICE = torch.device(device_name)
@@ -45,21 +47,6 @@ args_pd = {'env_name': 'Pendulum-v0',
            'final_noise_scale': 0.1,
            'exploration_end': 400,
            'c': 100}
-
-args_ll = {'env_name': 'LunarLanderContinuous-v2',
-           'seed': 42,
-           'gamma': 1,
-           'tau': 0.001,
-           'hidden_size': 200,
-           'replay_size': 50000,
-           'num_episodes': 1000,
-           'batch_size': 128,
-           'replay_num_updates': 5,
-           'ou_noise': True,
-           'noise_scale': 3,
-           'final_noise_scale': 0.1,
-           'exploration_end': 500,
-           'evaluate_episodes': 100}
 
 args_ll = {'env_name': 'LunarLanderContinuous-v2',
            'seed': 42,
@@ -103,7 +90,7 @@ def run():
             if len(replay_buffer) > args['batch_size']:
                 train_on_minibatches()
 
-        if episode % 1 == 0:
+        if episode % EPISODE_TO_SCORE == 0:
             eval_score = evaluate_policy()
 
             report_results(episode + 1, num_steps, eval_score)
